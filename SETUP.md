@@ -14,16 +14,16 @@ Para o app funcionar corretamente, você precisa adicionar as seguintes variáve
 **NEXT_PUBLIC_SUPABASE_URL**
 - Copie o valor de `SUPABASE_URL` que já existe nas suas variáveis
 - Formato: `https://seu-projeto.supabase.co`
-```
+\`\`\`
 https://hudbavbhohmxcresequb.supabase.co
-```
+\`\`\`
 
 **NEXT_PUBLIC_SUPABASE_ANON_KEY**
 - Copie o valor de `SUPABASE_ANON_KEY` que já existe nas suas variáveis
 - É uma chave longa começando com `eyJ...`
-```
+\`\`\`
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1ZGJhdmJob2hteGNyZXNlcXViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MDczMTQsImV4cCI6MjA4MjA4MzMxNH0.Y5vmGg3GzFLGGTLk9Bgx6W2AEEZDt2W39qpPXHv658M
-```
+\`\`\`
 
 ### Por que preciso do prefixo NEXT_PUBLIC_?
 

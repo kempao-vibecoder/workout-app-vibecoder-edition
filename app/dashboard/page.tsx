@@ -10,7 +10,7 @@ import { Dumbbell, TrendingUp, Calendar, Plus, LogOut } from "lucide-react"
 interface Workout {
   id: string
   name: string
-  day_of_week: string[]
+  days_of_week: string[] // CORRIGIDO: de day_of_week para days_of_week
 }
 
 interface WorkoutLog {
@@ -84,8 +84,10 @@ export default function DashboardPage() {
   }
 
   const today = new Date().toLocaleDateString("pt-BR", { weekday: "long" })
+  
+  // AQUI ESTAVA O ERRO: Adicionei proteção (?. e || []) e corrigi o nome da variável
   const todayWorkout = workouts.find((w) =>
-    w.day_of_week.some((day) => day.toLowerCase().includes(today.toLowerCase())),
+    (w.days_of_week || []).some((day) => day && day.toLowerCase().includes(today.toLowerCase())),
   )
 
   if (isLoading) {
@@ -133,7 +135,9 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-lg font-semibold">{todayWorkout.name}</p>
-                  <p className="text-sm text-muted-foreground">Dias: {todayWorkout.day_of_week.join(", ")}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Dias: {(todayWorkout.days_of_week || []).join(", ")}
+                  </p>
                 </div>
                 <Button onClick={() => router.push(`/log?workout=${todayWorkout.id}`)}>Iniciar Treino</Button>
               </div>
