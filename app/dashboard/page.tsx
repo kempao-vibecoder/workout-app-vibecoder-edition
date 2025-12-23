@@ -145,9 +145,8 @@ export default function DashboardPage() {
 
   const today = new Date().toLocaleDateString("pt-BR", { weekday: "long" })
   const todayWorkout = workouts.find((w) =>
-    (w.days_of_week || []).some((day) => day && day.toLowerCase().includes(today.toLowerCase())),
+    (w.days_of_week || []).some((day) => day && today.toLowerCase().includes(day.toLowerCase())),
   )
-
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">

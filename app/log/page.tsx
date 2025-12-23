@@ -66,8 +66,7 @@ export default function LogPage() {
       
       const target = paramWorkout 
         ? wData.find(w => w.id === paramWorkout) 
-        : wData.find(w => w.days_of_week?.some(d => d.toLowerCase().includes(today.toLowerCase())))
-
+        : wData.find(w => w.days_of_week?.some(d => d && today.toLowerCase().includes(d.toLowerCase())))
       if (target) selectWorkout(target as any)
       else setIsLoading(false)
     }
