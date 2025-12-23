@@ -5,12 +5,13 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Dumbbell, ArrowLeft, Trash2, Edit } from "lucide-react"
+import { Plus, Dumbbell, ArrowLeft, Trash2, Edit, Play } from "lucide-react"
 
 interface Workout {
   id: string
   name: string
-  day_of_weeks: string[]
+  day_of_weeks: string[] // O supabase pode retornar day_of_weeks ou days_of_week dependendo da versão, ajustaremos no map
+  days_of_week?: string[] 
   created_at: string
 }
 
@@ -77,25 +78,39 @@ export default function WorkoutsPage() {
         {workouts.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {workouts.map((workout) => (
-              <Card key={workout.id}>
-              <CardHeader>
-                <CardTitle>{workout.name}</CardTitle>
-                {/* AQUI ESTÁ A CORREÇÃO: */}
-                <CardDescription>
-                  {(workout.day_of_weeks || []).join(", ")}
-                </CardDescription>
-              </CardHeader>
-                <CardContent>
+              <Card key={workout.id} className="flex flex-col justify-between">
+                <CardHeader>
+                  <CardTitle>{workout.name}</CardTitle>
+                  <CardDescription>
+                    {(workout.days_of_week || workout.day_of_weeks || []).join(", ")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button 
+                    className="w-full font-bold" 
+                    size="lg"
+                    onClick={() => router.push(`/log?workout=${workout.id}`)}
+                  >
+                    <Play className="mr-2 h-5 w-5 fill-current" />
+                    INICIAR TREINO
+                  </Button>
+                  
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
+                      size="sm"
                       className="flex-1 bg-transparent"
                       onClick={() => router.push(`/workouts/${workout.id}/edit`)}
                     >
                       <Edit className="mr-2 h-4 w-4" />
                       Editar
                     </Button>
-                    <Button variant="destructive" size="icon" onClick={() => deleteWorkout(workout.id)}>
+                    <Button 
+                      variant="destructive" 
+                      size="sm"
+                      className="px-3"
+                      onClick={() => deleteWorkout(workout.id)}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
