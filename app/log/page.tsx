@@ -13,7 +13,8 @@ import { ArrowLeft, Search, Plus, X, Trophy, History, Check, Flame, Calendar as 
 import { toast } from "sonner"
 import confetti from "canvas-confetti"
 
-// Interfaces
+// --- Interfaces ---
+
 interface Exercise {
   id: string
   name: string
@@ -44,6 +45,8 @@ interface Workout {
 
 const MUSCLE_GROUPS = ["Peito", "Costas", "Pernas", "Ombros", "Braços", "Core"]
 
+// --- Lógica Principal do Componente ---
+
 function LogContent() {
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [allExercises, setAllExercises] = useState<Exercise[]>([])
@@ -53,7 +56,7 @@ function LogContent() {
   const [logExercises, setLogExercises] = useState<LogExerciseItem[]>([])
   const [sets, setSets] = useState<{ [exerciseUniqueId: string]: SetData[] }>({})
 
-  // Histórico por Série: { exercise_id: { 1: {weight, reps...}, 2: {...} } }
+  // Histórico por Série
   const [history, setHistory] = useState<Record<string, Record<number, { weight: number; reps: number; date: string }>>>({})
 
   const [date, setDate] = useState(new Date().toISOString().split("T")[0])
@@ -63,10 +66,9 @@ function LogContent() {
   const [isSaving, setIsSaving] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
 
-  // ID do Log atual (criado no primeiro check ou vindo da edição)
   const [currentLogId, setCurrentLogId] = useState<string | null>(null)
 
-  // Modal Adicionar Extra / Criar
+  // Modais
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -90,14 +92,12 @@ function LogContent() {
     
     if (wData) setWorkouts(wData as any)
 
-    // Verifica se estamos editando um log existente
     const logIdToEdit = searchParams.get("id")
     const paramWorkout = searchParams.get("workout")
 
     if (logIdToEdit) {
         await loadLogForEditing(logIdToEdit, exData || [])
     } else if (wData) {
-      // Modo Novo Treino
       const today = new Date().toLocaleDateString("pt-BR", { weekday: "long" })
       const target = paramWorkout
         ? wData.find((w) => w.id === paramWorkout)
@@ -112,13 +112,11 @@ function LogContent() {
     loadHistory()
   }
 
-  // Carrega dados de um treino passado para edição
   async function loadLogForEditing(logId: string, exercisesList: Exercise[]) {
       setIsEditMode(true)
       setCurrentLogId(logId)
       const supabase = createClient()
 
-      // Carregar Log e Sets
       const { data: log, error } = await supabase
         .from("workout_logs")
         .select(`*, set_logs(*), workouts(name)`)
@@ -131,7 +129,6 @@ function LogContent() {
           return
       }
 
-      // Configurar Estados Básicos
       setDate(log.date)
       if (log.created_at) {
           const dateObj = new Date(log.created_at)
@@ -140,9 +137,7 @@ function LogContent() {
       setWorkoutName(log.notes || (log.workouts?.name) || "Treino Personalizado")
       setSelectedWorkoutId(log.workout_id || "custom")
 
-      // Agrupar Sets por Exercício para reconstruir a UI
       const groupedSets: Record<string, any[]> = {}
-      
       const sortedSets = log.set_logs.sort((a: any, b: any) => a.set_number - b.set_number)
 
       sortedSets.forEach((set: any) => {
@@ -155,14 +150,14 @@ function LogContent() {
 
       Object.keys(groupedSets).forEach((exId, index) => {
           const exerciseDef = exercisesList.find(e => e.id === exId)
-          const uniqueId = `edit-${exId}-${index}` // ID único para a UI
+          const uniqueId = `edit-${exId}-${index}`
           
           if (exerciseDef) {
               restoredExercises.push({
                   unique_id: uniqueId,
                   exercise_id: exId,
                   name: exerciseDef.name,
-                  is_extra: false // Na edição tratamos tudo como parte do treino
+                  is_extra: false
               })
 
               restoredSetsState[uniqueId] = groupedSets[exId].map((s: any) => ({
@@ -185,7 +180,6 @@ function LogContent() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    // Busca sets completados
     const { data: historyData } = await supabase
       .from("set_logs")
       .select(`weight, reps, exercise_id, set_number, created_at`)
@@ -194,13 +188,9 @@ function LogContent() {
       .limit(1000)
 
     if (historyData) {
-      // Mapa: ExerciseID -> SetNumber -> Dados
       const historyMap: Record<string, Record<number, any>> = {}
-      
       historyData.forEach((item) => {
         if (!historyMap[item.exercise_id]) historyMap[item.exercise_id] = {}
-        
-        // Como a query está ordenada por data DESC, o primeiro que aparecer para (ExID + SetNum) é o mais recente
         if (!historyMap[item.exercise_id][item.set_number]) {
             historyMap[item.exercise_id][item.set_number] = {
                 weight: item.weight,
@@ -232,8 +222,7 @@ function LogContent() {
   function addSet(uniqueId: string) {
     setSets((prev) => {
       const current = prev[uniqueId] || []
-      const lastSet =
-        current.length > 0
+      const lastSet = current.length > 0
           ? current[current.length - 1]
           : { reps: "", weight: "", completed: false, is_warmup: false }
 
@@ -247,22 +236,18 @@ function LogContent() {
   function updateSet(uniqueId: string, index: number, field: keyof SetData, value: any) {
     setSets((prev) => {
       const currentSets = [...(prev[uniqueId] || [])]
-
       let shouldUncheck = false
       if ((field === "weight" || field === "reps") && currentSets[index].completed) {
         shouldUncheck = true
       }
-
       currentSets[index] = {
         ...currentSets[index],
         [field]: value,
         completed: shouldUncheck ? false : field === "completed" ? value : currentSets[index].completed,
       }
-
       if (field === "completed" && value === true) {
         saveSetToDb(uniqueId, currentSets[index], index)
       }
-
       return { ...prev, [uniqueId]: currentSets }
     })
   }
@@ -278,7 +263,6 @@ function LogContent() {
     let activeLogId = currentLogId
 
     if (!activeLogId) {
-      // Se não tem log (novo treino), cria. Se for edição, já temos o ID.
       const { data: newLog, error } = await supabase
         .from("workout_logs")
         .insert({
@@ -365,11 +349,10 @@ function LogContent() {
     setIsSaving(true)
     const supabase = createClient()
 
-    // Se estamos editando, atualizamos o log principal com os dados finais
     if (currentLogId) {
       await supabase.from("workout_logs").update({ 
           completed: true,
-          date: date, // Garante que a data editada seja salva
+          date: date,
           notes: workoutName
       }).eq("id", currentLogId)
     } else {
@@ -389,7 +372,6 @@ function LogContent() {
     setTimeout(() => { router.push("/dashboard") }, 1500)
   }
 
-  // --- Função para Excluir Treino ---
   async function handleDelete() {
     if (!currentLogId) return
     if (!confirm("Tem certeza que deseja excluir este treino? Essa ação não pode ser desfeita.")) return
@@ -407,7 +389,6 @@ function LogContent() {
         setIsSaving(false)
     } else {
         toast.success("Treino excluído com sucesso")
-        // Redireciona de volta para o dashboard
         router.push("/dashboard")
     }
   }
@@ -424,7 +405,6 @@ function LogContent() {
             </Button>
             <div>
               <h1 className="text-sm font-bold">{workoutName}</h1>
-              {/* Se for edição, mostramos data e hora mais explícitos */}
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1"><CalendarIcon className="h-3 w-3"/> 
                     {new Date(date).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
@@ -436,7 +416,6 @@ function LogContent() {
             </div>
           </div>
 
-          {/* BOTÃO DE DELETAR (Só aparece no modo de edição) */}
           {isEditMode && (
             <Button 
                 variant="ghost" 
@@ -455,8 +434,6 @@ function LogContent() {
           const currentSetCount = (sets[exercise.unique_id]?.length || 0)
           const nextSetNumber = currentSetCount + 1
           
-          // Lógica 2: Histórico baseado na série que será feita (ou a última adicionada)
-          // Se já tem séries, pega o histórico da próxima (ou da última se estiver focado nela - simplificação: pega next)
           const setHistoryData = history[exercise.exercise_id]?.[nextSetNumber]
 
           return (
@@ -479,7 +456,6 @@ function LogContent() {
                       <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">Extra</span>
                     )}
                     
-                    {/* TAG DE HISTÓRICO INTELIGENTE POR SÉRIE */}
                     <div className="flex items-center gap-1 text-xs text-muted-foreground bg-background/50 px-2 py-0.5 rounded-full border border-dashed border-primary/30">
                         <History className="h-3 w-3 text-primary" />
                         {setHistoryData ? (
@@ -531,5 +507,40 @@ function LogContent() {
                         <Input
                           type="number"
                           className={`h-10 text-center font-bold text-lg ${set.completed ? "bg-muted/50" : "bg-background"}`}
-                          // Placeholder inteligente também na linha, se tiver histórico pra essa série específica
-                          placeholder={history
+                          placeholder={history[exercise.exercise_id]?.[idx+1]?.weight?.toString() || "-"}
+                          value={set.weight}
+                          onChange={(e) => updateSet(exercise.unique_id, idx, "weight", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="col-span-4">
+                        <Input
+                          type="number"
+                          className={`h-10 text-center font-bold text-lg ${set.completed ? "bg-muted/50" : "bg-background"}`}
+                          placeholder={history[exercise.exercise_id]?.[idx+1]?.reps?.toString() || "-"}
+                          value={set.reps}
+                          onChange={(e) => updateSet(exercise.unique_id, idx, "reps", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="col-span-3 flex gap-1 justify-center">
+                        <Button
+                          size="icon"
+                          className={`flex-1 h-10 transition-all ${
+                            set.completed
+                              ? "bg-green-500 hover:bg-green-600 text-white"
+                              : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                          }`}
+                          onClick={() => updateSet(exercise.unique_id, idx, "completed", !set.completed)}
+                        >
+                          <Check className={`h-5 w-5 ${set.completed ? "scale-110" : "scale-100"}`} />
+                        </Button>
+
+                         {!set.completed && (
+                             <Button
+                                size="icon"
+                                variant="ghost"
+                                className={`h-10 w-8 ${set.is_warmup ? "text-orange-500 bg-orange-500/10" : "text-muted-foreground/30 hover:text-orange-500"}`}
+                                onClick={() => toggleWarmup(exercise.unique_id, idx)}
+                             >
+                                 <Flame className="h-4 w
