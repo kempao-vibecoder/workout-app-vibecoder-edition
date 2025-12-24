@@ -18,7 +18,7 @@ import {
   Save, 
   X, 
   ChevronRight,
-  BicepsFlexed,
+  ListChecks,
   LayoutList,
   Clock // Importei o ícone de relógio
 } from "lucide-react"
@@ -244,8 +244,7 @@ export default function DashboardPage() {
                     <CardHeader className="pb-2 z-10">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h2 className="text-2xl font-bold">Olá, Atleta! 👋</h2>
-                                <p className="text-muted-foreground">Vamos superar seus limites hoje?</p>
+                                <h2 className="text-2xl font-bold">Bora treinar pesado?! 💪</h2>
                             </div>
                             <div className="text-right hidden sm:block">
                                 <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Treinos na Semana</p>
@@ -313,7 +312,7 @@ export default function DashboardPage() {
                     onClick={() => router.push("/exercises")}
                 >
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500 group-hover:bg-purple-500 group-hover:text-white transition-colors"><BicepsFlexed className="h-5 w-5" /></div>
+                        <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500 group-hover:bg-purple-500 group-hover:text-white transition-colors"><ListChecks className="h-5 w-5" /></div>
                         <div className="text-left">
                             <span className="block font-semibold">Exercícios</span>
                             <span className="text-xs text-muted-foreground font-normal">Biblioteca</span>
