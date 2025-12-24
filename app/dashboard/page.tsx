@@ -18,7 +18,7 @@ import {
   Save, 
   X, 
   ChevronRight,
-  BicepsFlexed,
+  ListChecks, 
   LayoutList
 } from "lucide-react"
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from "recharts"
@@ -313,7 +313,7 @@ export default function DashboardPage() {
                     onClick={() => router.push("/exercises")}
                 >
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500 group-hover:bg-purple-500 group-hover:text-white transition-colors"><BicepsFlexed className="h-5 w-5" /></div>
+                        <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500 group-hover:bg-purple-500 group-hover:text-white transition-colors"><ListChecks className="h-5 w-5" /></div>
                         <div className="text-left">
                             <span className="block font-semibold">Exercícios</span>
                             <span className="text-xs text-muted-foreground font-normal">Biblioteca</span>
