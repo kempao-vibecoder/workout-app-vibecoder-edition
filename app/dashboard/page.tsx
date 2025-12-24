@@ -127,7 +127,7 @@ export default function DashboardPage() {
     // Processar gráfico (últimos 7 dias)
     const dataMap: Record<string, { volume: number, treinos: number }> = {}
     
-    // Iniciar últimos 7 dias com 0
+    // Iniciar últimos 7 dias com 0 para o gráfico não ficar vazio
     for (let i = 6; i >= 0; i--) {
         const d = new Date()
         d.setDate(d.getDate() - i)
@@ -142,16 +142,16 @@ export default function DashboardPage() {
         const dateObj = new Date(log.date)
         const dateKey = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
         
-        // Volume do treino
+        // Volume do treino (Carga * Reps)
         const sessionVolume = log.set_logs.reduce((acc, set) => acc + (set.weight * set.reps), 0)
 
-        // Se estiver dentro do range do gráfico
+        // Se estiver dentro do range do gráfico (últimos 7 dias)
         if (dataMap[dateKey]) {
             dataMap[dateKey].treinos += 1
             dataMap[dateKey].volume += sessionVolume
         }
 
-        // Stats da semana atual (domingo a sábado ou últimos 7 dias)
+        // Stats da semana atual (apenas últimos 7 dias corridos)
         const diffTime = Math.abs(new Date().getTime() - dateObj.getTime())
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) 
         if (diffDays <= 7) {
@@ -196,8 +196,9 @@ export default function DashboardPage() {
 
   // Lógica do Treino de Hoje
   const todayName = new Date().toLocaleDateString("pt-BR", { weekday: "long" }).toLowerCase()
+  // Procura se existe algum treino que tenha o dia de hoje na lista
   const todayWorkout = workouts.find((w) =>
-    (w.days_of_week || []).some((day) => day && day.toLowerCase() === todayName),
+    (w.days_of_week || []).some((day) => day && day.toLowerCase().includes(todayName.split('-')[0])),
   )
 
   if (isLoading) {
@@ -230,19 +231,292 @@ export default function DashboardPage() {
 
       <div className="container mx-auto p-4 md:p-6 space-y-8">
         
-        {/* Section 1: Hero & Today's Workout */}
+        {/* Section 1: Hero & Actions Grid */}
         <div className="grid gap-4 md:grid-cols-12">
-            {/* Card Principal: Treino de Hoje */}
+            
+            {/* Card Principal: Treino de Hoje (Ocupa 2/3 no desktop) */}
             <div className="md:col-span-8">
-                <Card className="h-full border-primary/20 bg-gradient-to-br from-card to-secondary/10 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-10 -mt-10 blur-3xl pointer-events-none"></div>
+                <Card className="h-full border-primary/20 bg-gradient-to-br from-card to-secondary/10 relative overflow-hidden flex flex-col justify-center">
+                    {/* Efeito visual de fundo */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none"></div>
                     
-                    <CardHeader className="pb-2">
+                    <CardHeader className="pb-2 z-10">
                         <div className="flex items-center justify-between">
                             <div>
                                 <h2 className="text-2xl font-bold">Olá, Atleta! 👋</h2>
-                                <p className="text-muted-foreground">Pronto para superar seus limites hoje?</p>
+                                <p className="text-muted-foreground">Vamos superar seus limites hoje?</p>
                             </div>
-                            {/* Stats Rápidos Mobile */}
+                            {/* Stats Rápidos (visível apenas em telas maiores) */}
                             <div className="text-right hidden sm:block">
-                                <p
+                                <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Treinos na Semana</p>
+                                <p className="text-3xl font-bold text-primary">{weeklyWorkouts}</p>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    
+                    <CardContent className="mt-2 z-10">
+                        {todayWorkout ? (
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-xl bg-background/60 border border-border/50 shadow-sm backdrop-blur-sm">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary text-primary-foreground uppercase tracking-wide">Hoje</span>
+                                        <span className="text-xs text-muted-foreground capitalize font-medium">{todayName}</span>
+                                    </div>
+                                    <h3 className="text-xl font-bold text-foreground">{todayWorkout.name}</h3>
+                                    <p className="text-xs text-muted-foreground">Seu treino agendado está pronto.</p>
+                                </div>
+                                <Button size="lg" className="w-full sm:w-auto font-bold shadow-lg shadow-primary/20 h-12 px-8 text-base" onClick={() => router.push(`/log?workout=${todayWorkout.id}`)}>
+                                    <Play className="mr-2 h-5 w-5 fill-current" /> INICIAR
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-xl bg-background/60 border border-border/50 shadow-sm border-dashed">
+                                <div className="flex items-center gap-4 text-muted-foreground">
+                                    <div className="p-3 bg-secondary rounded-full">
+                                        <Calendar className="h-6 w-6 opacity-70" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-medium text-foreground">Dia de descanso?</h3>
+                                        <p className="text-xs">Nenhum treino agendado para hoje.</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 w-full sm:w-auto">
+                                    <Button className="flex-1 sm:flex-none" onClick={() => router.push("/log")}>
+                                        <Plus className="mr-2 h-4 w-4" /> Treino Avulso
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Card Secundário: Ações Rápidas (Ocupa 1/3 no desktop) */}
+            <div className="md:col-span-4 grid grid-rows-3 gap-3 h-full min-h-[220px]">
+                <Button 
+                    variant="outline" 
+                    className="h-full justify-start px-4 border-l-4 border-l-blue-500 hover:bg-secondary/50 group relative overflow-hidden"
+                    onClick={() => router.push("/workouts/new")}
+                >
+                    <div className="flex items-center gap-3 relative z-10">
+                        <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-colors"><Plus className="h-5 w-5" /></div>
+                        <div className="text-left">
+                            <span className="block font-semibold">Criar Rotina</span>
+                            <span className="text-xs text-muted-foreground font-normal">Novo plano semanal</span>
+                        </div>
+                    </div>
+                </Button>
+
+                <Button 
+                    variant="outline" 
+                    className="h-full justify-start px-4 border-l-4 border-l-purple-500 hover:bg-secondary/50 group"
+                    onClick={() => router.push("/exercises")}
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500 group-hover:bg-purple-500 group-hover:text-white transition-colors"><BicepsFlexed className="h-5 w-5" /></div>
+                        <div className="text-left">
+                            <span className="block font-semibold">Exercícios</span>
+                            <span className="text-xs text-muted-foreground font-normal">Biblioteca</span>
+                        </div>
+                    </div>
+                </Button>
+
+                <Button 
+                    variant="outline" 
+                    className="h-full justify-start px-4 border-l-4 border-l-emerald-500 hover:bg-secondary/50 group"
+                    onClick={() => router.push("/history")}
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors"><TrendingUp className="h-5 w-5" /></div>
+                        <div className="text-left">
+                            <span className="block font-semibold">Progresso</span>
+                            <span className="text-xs text-muted-foreground font-normal">Ver gráficos</span>
+                        </div>
+                    </div>
+                </Button>
+            </div>
+        </div>
+
+        {/* Section 2: Chart & History */}
+        <div className="grid gap-6 md:grid-cols-2">
+            
+            {/* Gráfico Semanal */}
+            <Card>
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle className="text-base flex items-center gap-2">
+                                <TrendingUp className="h-4 w-4 text-primary" /> Volume Semanal
+                            </CardTitle>
+                            <CardDescription>Carga total (kg) nos últimos 7 dias</CardDescription>
+                        </div>
+                        <div className="text-right">
+                             <span className="text-2xl font-bold">{totalVolume > 1000 ? `${(totalVolume/1000).toFixed(1)}k` : totalVolume}</span>
+                             <span className="text-xs text-muted-foreground ml-1">kg</span>
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent className="h-[250px] pt-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData}>
+                            <XAxis 
+                                dataKey="name" 
+                                fontSize={10} 
+                                tickLine={false} 
+                                axisLine={false}
+                                tickFormatter={(val) => val.split('/')[0]} // Mostrar só o dia
+                                tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                            />
+                            <Tooltip 
+                                cursor={{fill: 'transparent'}}
+                                contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', backgroundColor: 'hsl(var(--popover))', color: 'hsl(var(--popover-foreground))', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}
+                                itemStyle={{ color: 'hsl(var(--primary))' }}
+                                labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: '0.2rem' }}
+                            />
+                            <Bar 
+                                dataKey="volume" 
+                                fill="hsl(var(--primary))" 
+                                radius={[4, 4, 0, 0]} 
+                                barSize={24}
+                                animationDuration={1000}
+                            />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </CardContent>
+            </Card>
+
+            {/* Lista Histórico */}
+            <Card className="flex flex-col h-full max-h-[350px]">
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                        <LayoutList className="h-4 w-4 text-primary" /> Histórico Recente
+                    </CardTitle>
+                    <CardDescription>Seus últimos treinos realizados</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-auto pr-2 custom-scrollbar">
+                    <div className="space-y-3">
+                        {recentLogs.map((log) => (
+                            <div 
+                                key={log.id} 
+                                className="flex items-center justify-between p-3 rounded-lg border bg-card/50 hover:bg-accent hover:border-primary/30 transition-all cursor-pointer group" 
+                                onClick={() => openLogDetails(log)}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-1 h-8 rounded-full ${log.completed ? 'bg-primary' : 'bg-yellow-500'}`}></div>
+                                    <div>
+                                        <p className="font-semibold text-sm">{(log.workouts as any)?.name || "Treino Avulso"}</p>
+                                        <p className="text-[10px] text-muted-foreground capitalize flex gap-2">
+                                            <span>{new Date(log.date).toLocaleDateString("pt-BR", { weekday: 'short', day: '2-digit', month: 'short' })}</span>
+                                            <span>•</span>
+                                            <span>{log.set_logs.length} séries</span>
+                                        </p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors opacity-50 group-hover:opacity-100" />
+                            </div>
+                        ))}
+                        {recentLogs.length === 0 && (
+                            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground text-sm h-full">
+                                <Dumbbell className="h-8 w-8 mb-2 opacity-20" />
+                                <p>Nenhum treino registrado ainda.</p>
+                            </div>
+                        )}
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+      </div>
+
+      {/* Modal Detalhes/Edição */}
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+                <div className="flex items-center justify-between pr-8">
+                    <DialogTitle>{(selectedLog?.workouts as any)?.name || "Detalhes do Treino"}</DialogTitle>
+                    {!isEditing ? (
+                        <Button size="sm" variant="ghost" onClick={() => setIsEditing(true)}>
+                            <Pencil className="h-3 w-3 mr-2" /> Editar
+                        </Button>
+                    ) : (
+                        <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)}>
+                            <X className="h-3 w-3 mr-2" /> Cancelar
+                        </Button>
+                    )}
+                </div>
+                <DialogDescription>
+                    Realizado em {selectedLog && new Date(selectedLog.date).toLocaleDateString("pt-BR")}
+                </DialogDescription>
+            </DialogHeader>
+            
+            <div className="mt-4 space-y-6">
+                {selectedLog && Object.entries(
+                    (isEditing ? editFormData : selectedLog.set_logs).reduce((acc: any, set) => {
+                        const name = set.exercises?.name || "Exercício Desconhecido"
+                        if (!acc[name]) acc[name] = []
+                        acc[name].push(set)
+                        return acc
+                    }, {})
+                ).map(([exerciseName, sets]: [string, any], idx) => (
+                    <div key={idx} className="border-b pb-4 last:border-0 last:pb-0">
+                        <h4 className="font-semibold text-sm mb-2 flex items-center gap-2 text-primary">
+                            {exerciseName}
+                        </h4>
+                        <div className="grid grid-cols-12 gap-2 text-xs text-muted-foreground mb-1">
+                            <span className="col-span-2 text-center">Série</span>
+                            <span className="col-span-5 text-center">Carga (kg)</span>
+                            <span className="col-span-5 text-center">Reps</span>
+                        </div>
+                        <div className="space-y-1">
+                            {sets.sort((a: any, b: any) => a.set_number - b.set_number).map((set: any, sIdx: number) => (
+                                <div key={set.id} className="grid grid-cols-12 gap-2 text-sm items-center bg-muted/20 p-1 rounded">
+                                    <span className="col-span-2 text-center font-mono text-muted-foreground">{set.set_number}</span>
+                                    {isEditing ? (
+                                        <>
+                                            <div className="col-span-5 px-1">
+                                                <Input 
+                                                    type="number" 
+                                                    className="h-7 text-center bg-background" 
+                                                    value={set.weight} 
+                                                    onChange={(e) => {
+                                                        const newValue = e.target.value
+                                                        setEditFormData(prev => prev.map(p => p.id === set.id ? {...p, weight: newValue} : p))
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="col-span-5 px-1">
+                                                <Input 
+                                                    type="number" 
+                                                    className="h-7 text-center bg-background" 
+                                                    value={set.reps}
+                                                    onChange={(e) => {
+                                                        const newValue = e.target.value
+                                                        setEditFormData(prev => prev.map(p => p.id === set.id ? {...p, reps: newValue} : p))
+                                                    }}
+                                                />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="col-span-5 text-center font-medium">{set.weight}</span>
+                                            <span className="col-span-5 text-center font-medium">{set.reps}</span>
+                                        </>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+            
+            {isEditing && (
+                <DialogFooter className="pt-4 sticky bottom-0 bg-background pb-2 border-t mt-4">
+                    <Button onClick={handleSaveChanges} className="w-full">
+                        <Save className="mr-2 h-4 w-4" /> Salvar Alterações
+                    </Button>
+                </DialogFooter>
+            )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
