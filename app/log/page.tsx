@@ -543,4 +543,140 @@ function LogContent() {
                                 className={`h-10 w-8 ${set.is_warmup ? "text-orange-500 bg-orange-500/10" : "text-muted-foreground/30 hover:text-orange-500"}`}
                                 onClick={() => toggleWarmup(exercise.unique_id, idx)}
                              >
-                                 <Flame className="h-4 w
+                                 <Flame className="h-4 w-4" />
+                             </Button>
+                         )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Button
+                  variant="ghost"
+                  className="w-full rounded-none border-t h-12 text-primary hover:text-primary hover:bg-primary/5 font-medium"
+                  onClick={() => addSet(exercise.unique_id)}
+                >
+                  <Plus className="mr-2 h-4 w-4" /> Adicionar Série
+                </Button>
+              </CardContent>
+            </Card>
+          )
+        })}
+        
+        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+          <DialogTrigger asChild>
+            <Button
+              variant="outline"
+              className="w-full py-8 border-dashed border-2 text-muted-foreground hover:text-primary hover:border-primary"
+            >
+              <Plus className="mr-2 h-5 w-5" /> Adicionar Exercício ao Treino
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="top-[20%] translate-y-0">
+            <DialogHeader>
+              <DialogTitle>Adicionar Exercício</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome ou tag..."
+                  className="pl-9"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                {allExercises
+                  .filter(
+                    (ex) =>
+                      ex.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      ex.muscle_group.toLowerCase().includes(searchTerm.toLowerCase()),
+                  )
+                  .slice(0, 10)
+                  .map((ex) => (
+                    <div
+                      key={ex.id}
+                      className="p-3 hover:bg-accent rounded-md cursor-pointer flex justify-between items-center"
+                      onClick={() => handleAddExtraExercise(ex)}
+                    >
+                      <span className="font-medium">{ex.name}</span>
+                      <span className="text-xs bg-muted px-2 py-1 rounded">{ex.muscle_group}</span>
+                    </div>
+                  ))}
+
+                <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                  <DialogTrigger asChild>
+                    <div className="p-3 text-primary font-medium hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-2">
+                      <Plus className="h-4 w-4" /> Cadastrar novo: "{searchTerm}"
+                    </div>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Novo Exercício</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label>Nome</Label>
+                        <Input
+                          value={newExercise.name}
+                          onChange={(e) => setNewExercise({ ...newExercise, name: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Grupo</Label>
+                        <Select
+                          onValueChange={(val) => setNewExercise({ ...newExercise, muscle_group: val })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MUSCLE_GROUPS.map((g) => (
+                              <SelectItem key={g} value={g}>
+                                {g}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button onClick={handleCreateNewExercise} className="w-full">
+                        Salvar
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <div className="pt-4 pb-8">
+          <Button
+            size="lg"
+            className="w-full h-14 text-lg font-bold shadow-xl shadow-primary/20"
+            onClick={handleFinish}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              "Salvando..."
+            ) : (
+              <>
+                <Trophy className="mr-2 h-6 w-6 text-yellow-400" /> {isEditMode ? "ATUALIZAR TREINO" : "FINALIZAR TREINO"}
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// --- Componente Default Exportado com Suspense ---
+export default function LogPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center">Carregando...</div>}>
+      <LogContent />
+    </Suspense>
+  )
+}
