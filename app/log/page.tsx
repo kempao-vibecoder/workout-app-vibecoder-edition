@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Search, Plus, X, Trophy, History, Check, Flame, Calendar as CalendarIcon, Clock } from "lucide-react"
+import { ArrowLeft, Search, Plus, X, Trophy, History, Check, Flame, Calendar as CalendarIcon, Clock, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import confetti from "canvas-confetti"
 
@@ -141,11 +141,8 @@ function LogContent() {
       setSelectedWorkoutId(log.workout_id || "custom")
 
       // Agrupar Sets por Exercício para reconstruir a UI
-      // Como não salvamos a estrutura "visual" do treino (ordem, agrupamento), vamos reconstruir baseado nos sets salvos.
-      // Agrupamos sets pelo exercise_id
       const groupedSets: Record<string, any[]> = {}
       
-      // Ordena sets por created_at ou set_number para garantir ordem correta
       const sortedSets = log.set_logs.sort((a: any, b: any) => a.set_number - b.set_number)
 
       sortedSets.forEach((set: any) => {
@@ -392,6 +389,29 @@ function LogContent() {
     setTimeout(() => { router.push("/dashboard") }, 1500)
   }
 
+  // --- Função para Excluir Treino ---
+  async function handleDelete() {
+    if (!currentLogId) return
+    if (!confirm("Tem certeza que deseja excluir este treino? Essa ação não pode ser desfeita.")) return
+
+    setIsSaving(true)
+    const supabase = createClient()
+    
+    const { error } = await supabase
+        .from("workout_logs")
+        .delete()
+        .eq("id", currentLogId)
+
+    if (error) {
+        toast.error("Erro ao excluir o treino")
+        setIsSaving(false)
+    } else {
+        toast.success("Treino excluído com sucesso")
+        // Redireciona de volta para o dashboard
+        router.push("/dashboard")
+    }
+  }
+
   if (isLoading) return <div className="flex h-screen items-center justify-center">Carregando...</div>
 
   return (
@@ -415,6 +435,18 @@ function LogContent() {
               </div>
             </div>
           </div>
+
+          {/* BOTÃO DE DELETAR (Só aparece no modo de edição) */}
+          {isEditMode && (
+            <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={handleDelete}
+            >
+                <Trash2 className="h-5 w-5" />
+            </Button>
+          )}
         </div>
       </header>
 
@@ -500,180 +532,4 @@ function LogContent() {
                           type="number"
                           className={`h-10 text-center font-bold text-lg ${set.completed ? "bg-muted/50" : "bg-background"}`}
                           // Placeholder inteligente também na linha, se tiver histórico pra essa série específica
-                          placeholder={history[exercise.exercise_id]?.[idx+1]?.weight?.toString() || "-"}
-                          value={set.weight}
-                          onChange={(e) => updateSet(exercise.unique_id, idx, "weight", e.target.value)}
-                        />
-                      </div>
-
-                      <div className="col-span-4">
-                        <Input
-                          type="number"
-                          className={`h-10 text-center font-bold text-lg ${set.completed ? "bg-muted/50" : "bg-background"}`}
-                          placeholder={history[exercise.exercise_id]?.[idx+1]?.reps?.toString() || "-"}
-                          value={set.reps}
-                          onChange={(e) => updateSet(exercise.unique_id, idx, "reps", e.target.value)}
-                        />
-                      </div>
-
-                      {/* Botões de Ação */}
-                      <div className="col-span-3 flex gap-1 justify-center">
-                         {/* Botão Check */}
-                        <Button
-                          size="icon"
-                          className={`flex-1 h-10 transition-all ${
-                            set.completed
-                              ? "bg-green-500 hover:bg-green-600 text-white"
-                              : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                          }`}
-                          onClick={() => updateSet(exercise.unique_id, idx, "completed", !set.completed)}
-                        >
-                          <Check className={`h-5 w-5 ${set.completed ? "scale-110" : "scale-100"}`} />
-                        </Button>
-
-                         {/* Botão de Aquecimento Explícito */}
-                         {!set.completed && (
-                             <Button
-                                size="icon"
-                                variant="ghost"
-                                className={`h-10 w-8 ${set.is_warmup ? "text-orange-500 bg-orange-500/10" : "text-muted-foreground/30 hover:text-orange-500"}`}
-                                onClick={() => toggleWarmup(exercise.unique_id, idx)}
-                             >
-                                 <Flame className="h-4 w-4" />
-                             </Button>
-                         )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <Button
-                  variant="ghost"
-                  className="w-full rounded-none border-t h-12 text-primary hover:text-primary hover:bg-primary/5 font-medium"
-                  onClick={() => addSet(exercise.unique_id)}
-                >
-                  <Plus className="mr-2 h-4 w-4" /> Adicionar Série
-                </Button>
-              </CardContent>
-            </Card>
-          )
-        })}
-
-        {/* ... (O restante do código, como os Modais de busca e criação, permanece igual) ... */}
-        
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
-            <Button
-              variant="outline"
-              className="w-full py-8 border-dashed border-2 text-muted-foreground hover:text-primary hover:border-primary"
-            >
-              <Plus className="mr-2 h-5 w-5" /> Adicionar Exercício ao Treino
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="top-[20%] translate-y-0">
-            <DialogHeader>
-              <DialogTitle>Adicionar Exercício</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por nome ou tag..."
-                  className="pl-9"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1 max-h-[300px] overflow-y-auto">
-                {allExercises
-                  .filter(
-                    (ex) =>
-                      ex.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      ex.muscle_group.toLowerCase().includes(searchTerm.toLowerCase()),
-                  )
-                  .slice(0, 10)
-                  .map((ex) => (
-                    <div
-                      key={ex.id}
-                      className="p-3 hover:bg-accent rounded-md cursor-pointer flex justify-between items-center"
-                      onClick={() => handleAddExtraExercise(ex)}
-                    >
-                      <span className="font-medium">{ex.name}</span>
-                      <span className="text-xs bg-muted px-2 py-1 rounded">{ex.muscle_group}</span>
-                    </div>
-                  ))}
-
-                <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                  <DialogTrigger asChild>
-                    <div className="p-3 text-primary font-medium hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-2">
-                      <Plus className="h-4 w-4" /> Cadastrar novo: "{searchTerm}"
-                    </div>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Novo Exercício</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label>Nome</Label>
-                        <Input
-                          value={newExercise.name}
-                          onChange={(e) => setNewExercise({ ...newExercise, name: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Grupo</Label>
-                        <Select
-                          onValueChange={(val) => setNewExercise({ ...newExercise, muscle_group: val })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {MUSCLE_GROUPS.map((g) => (
-                              <SelectItem key={g} value={g}>
-                                {g}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button onClick={handleCreateNewExercise} className="w-full">
-                        Salvar
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        <div className="pt-4 pb-8">
-          <Button
-            size="lg"
-            className="w-full h-14 text-lg font-bold shadow-xl shadow-primary/20"
-            onClick={handleFinish}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              "Salvando..."
-            ) : (
-              <>
-                <Trophy className="mr-2 h-6 w-6 text-yellow-400" /> {isEditMode ? "ATUALIZAR TREINO" : "FINALIZAR TREINO"}
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default function LogPage() {
-  return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center">Carregando...</div>}>
-      <LogContent />
-    </Suspense>
-  )
-}
+                          placeholder={history
