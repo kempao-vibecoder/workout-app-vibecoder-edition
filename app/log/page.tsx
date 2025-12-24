@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Search, Plus, X, Trophy, History, Check } from "lucide-react"
+import { ArrowLeft, Search, Plus, X, Trophy, History, Check, Flame, Calendar as CalendarIcon, Clock } from "lucide-react"
 import { toast } from "sonner"
 import confetti from "canvas-confetti"
 
@@ -28,7 +28,7 @@ interface LogExerciseItem {
 }
 
 interface SetData {
-  id?: string // ID do set_log no banco (para update)
+  id?: string 
   reps: number | string
   weight: number | string
   completed: boolean
@@ -44,7 +44,6 @@ interface Workout {
 
 const MUSCLE_GROUPS = ["Peito", "Costas", "Pernas", "Ombros", "Braços", "Core"]
 
-// 1. Lógica principal movida para LogContent
 function LogContent() {
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [allExercises, setAllExercises] = useState<Exercise[]>([])
@@ -54,14 +53,17 @@ function LogContent() {
   const [logExercises, setLogExercises] = useState<LogExerciseItem[]>([])
   const [sets, setSets] = useState<{ [exerciseUniqueId: string]: SetData[] }>({})
 
-  // Histórico de Cargas: { exercise_id: { weight: 10, reps: 10, date: '...' } }
-  const [history, setHistory] = useState<Record<string, { weight: number; reps: number; date: string }>>({})
+  // Histórico por Série: { exercise_id: { 1: {weight, reps...}, 2: {...} } }
+  const [history, setHistory] = useState<Record<string, Record<number, { weight: number; reps: number; date: string }>>>({})
 
   const [date, setDate] = useState(new Date().toISOString().split("T")[0])
+  const [time, setTime] = useState(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
+  
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
 
-  // ID do Log atual (criado no primeiro check)
+  // ID do Log atual (criado no primeiro check ou vindo da edição)
   const [currentLogId, setCurrentLogId] = useState<string | null>(null)
 
   // Modal Adicionar Extra / Criar
@@ -85,11 +87,17 @@ function LogContent() {
     const { data: wData } = await supabase
       .from("workouts")
       .select(`*, workout_exercises(exercise_id, exercises(*))`)
+    
+    if (wData) setWorkouts(wData as any)
 
-    if (wData) {
-      setWorkouts(wData as any)
-      const paramWorkout = searchParams.get("workout")
+    // Verifica se estamos editando um log existente
+    const logIdToEdit = searchParams.get("id")
+    const paramWorkout = searchParams.get("workout")
 
+    if (logIdToEdit) {
+        await loadLogForEditing(logIdToEdit, exData || [])
+    } else if (wData) {
+      // Modo Novo Treino
       const today = new Date().toLocaleDateString("pt-BR", { weekday: "long" })
       const target = paramWorkout
         ? wData.find((w) => w.id === paramWorkout)
@@ -97,35 +105,111 @@ function LogContent() {
 
       if (target) selectWorkout(target as any)
       else setIsLoading(false)
+    } else {
+        setIsLoading(false)
     }
 
-    // Carregar histórico de cargas
     loadHistory()
+  }
+
+  // Carrega dados de um treino passado para edição
+  async function loadLogForEditing(logId: string, exercisesList: Exercise[]) {
+      setIsEditMode(true)
+      setCurrentLogId(logId)
+      const supabase = createClient()
+
+      // Carregar Log e Sets
+      const { data: log, error } = await supabase
+        .from("workout_logs")
+        .select(`*, set_logs(*), workouts(name)`)
+        .eq("id", logId)
+        .single()
+
+      if (error || !log) {
+          toast.error("Treino não encontrado")
+          setIsLoading(false)
+          return
+      }
+
+      // Configurar Estados Básicos
+      setDate(log.date)
+      if (log.created_at) {
+          const dateObj = new Date(log.created_at)
+          setTime(dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
+      }
+      setWorkoutName(log.notes || (log.workouts?.name) || "Treino Personalizado")
+      setSelectedWorkoutId(log.workout_id || "custom")
+
+      // Agrupar Sets por Exercício para reconstruir a UI
+      // Como não salvamos a estrutura "visual" do treino (ordem, agrupamento), vamos reconstruir baseado nos sets salvos.
+      // Agrupamos sets pelo exercise_id
+      const groupedSets: Record<string, any[]> = {}
+      
+      // Ordena sets por created_at ou set_number para garantir ordem correta
+      const sortedSets = log.set_logs.sort((a: any, b: any) => a.set_number - b.set_number)
+
+      sortedSets.forEach((set: any) => {
+          if (!groupedSets[set.exercise_id]) groupedSets[set.exercise_id] = []
+          groupedSets[set.exercise_id].push(set)
+      })
+
+      const restoredExercises: LogExerciseItem[] = []
+      const restoredSetsState: any = {}
+
+      Object.keys(groupedSets).forEach((exId, index) => {
+          const exerciseDef = exercisesList.find(e => e.id === exId)
+          const uniqueId = `edit-${exId}-${index}` // ID único para a UI
+          
+          if (exerciseDef) {
+              restoredExercises.push({
+                  unique_id: uniqueId,
+                  exercise_id: exId,
+                  name: exerciseDef.name,
+                  is_extra: false // Na edição tratamos tudo como parte do treino
+              })
+
+              restoredSetsState[uniqueId] = groupedSets[exId].map((s: any) => ({
+                  id: s.id,
+                  reps: s.reps,
+                  weight: s.weight,
+                  completed: s.completed,
+                  is_warmup: s.is_warmup || false
+              }))
+          }
+      })
+
+      setLogExercises(restoredExercises)
+      setSets(restoredSetsState)
+      setIsLoading(false)
   }
 
   async function loadHistory() {
     const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
+    // Busca sets completados
     const { data: historyData } = await supabase
       .from("set_logs")
-      .select(`weight, reps, exercise_id, created_at`)
+      .select(`weight, reps, exercise_id, set_number, created_at`)
       .eq("completed", true)
       .order("created_at", { ascending: false })
-      .limit(500)
+      .limit(1000)
 
     if (historyData) {
-      const historyMap: Record<string, any> = {}
+      // Mapa: ExerciseID -> SetNumber -> Dados
+      const historyMap: Record<string, Record<number, any>> = {}
+      
       historyData.forEach((item) => {
-        if (!historyMap[item.exercise_id]) {
-          historyMap[item.exercise_id] = {
-            weight: item.weight,
-            reps: item.reps,
-            date: item.created_at,
-          }
+        if (!historyMap[item.exercise_id]) historyMap[item.exercise_id] = {}
+        
+        // Como a query está ordenada por data DESC, o primeiro que aparecer para (ExID + SetNum) é o mais recente
+        if (!historyMap[item.exercise_id][item.set_number]) {
+            historyMap[item.exercise_id][item.set_number] = {
+                weight: item.weight,
+                reps: item.reps,
+                date: item.created_at,
+            }
         }
       })
       setHistory(historyMap)
@@ -191,14 +275,13 @@ function LogContent() {
     if (!exercise) return
 
     const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     let activeLogId = currentLogId
 
     if (!activeLogId) {
+      // Se não tem log (novo treino), cria. Se for edição, já temos o ID.
       const { data: newLog, error } = await supabase
         .from("workout_logs")
         .insert({
@@ -253,19 +336,13 @@ function LogContent() {
 
   async function handleCreateNewExercise() {
     const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
 
-    const { data } = await supabase
-      .from("exercises")
-      .insert({
+    const { data } = await supabase.from("exercises").insert({
         ...newExercise,
         is_custom: true,
         user_id: user?.id,
-      })
-      .select()
-      .single()
+      }).select().single()
 
     if (data) {
       setAllExercises((prev) => [...prev, data])
@@ -280,12 +357,7 @@ function LogContent() {
     const newUniqueId = `extra-${exercise.id}-${Date.now()}`
     setLogExercises((prev) => [
       ...prev,
-      {
-        unique_id: newUniqueId,
-        exercise_id: exercise.id,
-        name: exercise.name,
-        is_extra: true,
-      },
+      { unique_id: newUniqueId, exercise_id: exercise.id, name: exercise.name, is_extra: true },
     ])
     setSets((prev) => ({ ...prev, [newUniqueId]: [] }))
     setIsAddOpen(false)
@@ -296,12 +368,15 @@ function LogContent() {
     setIsSaving(true)
     const supabase = createClient()
 
+    // Se estamos editando, atualizamos o log principal com os dados finais
     if (currentLogId) {
-      await supabase.from("workout_logs").update({ completed: true }).eq("id", currentLogId)
+      await supabase.from("workout_logs").update({ 
+          completed: true,
+          date: date, // Garante que a data editada seja salva
+          notes: workoutName
+      }).eq("id", currentLogId)
     } else {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         await supabase.from("workout_logs").insert({
           user_id: user.id,
@@ -313,15 +388,8 @@ function LogContent() {
       }
     }
 
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-    })
-
-    setTimeout(() => {
-      router.push("/dashboard")
-    }, 2000)
+    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } })
+    setTimeout(() => { router.push("/dashboard") }, 1500)
   }
 
   if (isLoading) return <div className="flex h-screen items-center justify-center">Carregando...</div>
@@ -336,9 +404,15 @@ function LogContent() {
             </Button>
             <div>
               <h1 className="text-sm font-bold">{workoutName}</h1>
-              <p className="text-xs text-muted-foreground capitalize">
-                {new Date(date).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric" })}
-              </p>
+              {/* Se for edição, mostramos data e hora mais explícitos */}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1"><CalendarIcon className="h-3 w-3"/> 
+                    {new Date(date).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
+                  </span>
+                  {isEditMode && (
+                      <span className="flex items-center gap-1"><Clock className="h-3 w-3"/> {time}</span>
+                  )}
+              </div>
             </div>
           </div>
         </div>
@@ -346,51 +420,63 @@ function LogContent() {
 
       <div className="container mx-auto max-w-3xl p-4 space-y-6">
         {logExercises.map((exercise) => {
-          const lastHistory = history[exercise.exercise_id]
+          const currentSetCount = (sets[exercise.unique_id]?.length || 0)
+          const nextSetNumber = currentSetCount + 1
+          
+          // Lógica 2: Histórico baseado na série que será feita (ou a última adicionada)
+          // Se já tem séries, pega o histórico da próxima (ou da última se estiver focado nela - simplificação: pega next)
+          const setHistoryData = history[exercise.exercise_id]?.[nextSetNumber]
 
           return (
             <Card key={exercise.unique_id} className="overflow-hidden shadow-sm border-l-4 border-l-primary/50">
               <CardHeader className="bg-muted/30 py-3 px-4 flex flex-row items-center justify-between space-y-0">
-                <div className="flex flex-col gap-1">
-                  <CardTitle className="text-base">{exercise.name}</CardTitle>
-                  <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-1 w-full">
+                  <div className="flex justify-between items-start">
+                    <CardTitle className="text-base truncate pr-2">{exercise.name}</CardTitle>
+                    <Button
+                        variant="ghost" size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive -mt-1 -mr-2"
+                        onClick={() => setLogExercises((prev) => prev.filter((ex) => ex.unique_id !== exercise.unique_id))}
+                    >
+                        <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 mt-1">
                     {exercise.is_extra && (
                       <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">Extra</span>
                     )}
-                    {lastHistory && (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground bg-background/50 px-2 py-0.5 rounded-full border">
-                        <History className="h-3 w-3" />
-                        Last: <strong>{lastHistory.weight}kg</strong> x {lastHistory.reps}
-                      </div>
-                    )}
+                    
+                    {/* TAG DE HISTÓRICO INTELIGENTE POR SÉRIE */}
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground bg-background/50 px-2 py-0.5 rounded-full border border-dashed border-primary/30">
+                        <History className="h-3 w-3 text-primary" />
+                        {setHistoryData ? (
+                            <span>
+                                Série {nextSetNumber}: <strong>{setHistoryData.weight}kg</strong> x {setHistoryData.reps}
+                            </span>
+                        ) : (
+                            <span>Série {nextSetNumber}: Sem histórico</span>
+                        )}
+                    </div>
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => {
-                    setLogExercises((prev) => prev.filter((ex) => ex.unique_id !== exercise.unique_id))
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
               </CardHeader>
+
               <CardContent className="p-0">
                 <div className="p-2 space-y-2">
                   {(sets[exercise.unique_id]?.length || 0) > 0 && (
-                    <div className="grid grid-cols-10 gap-2 text-xs text-muted-foreground text-center font-medium px-2 uppercase tracking-wider">
+                    <div className="grid grid-cols-12 gap-2 text-xs text-muted-foreground text-center font-medium px-2 uppercase tracking-wider">
                       <div className="col-span-1">#</div>
-                      <div className="col-span-3">kg</div>
-                      <div className="col-span-3">reps</div>
-                      <div className="col-span-3">check</div>
+                      <div className="col-span-4">kg</div>
+                      <div className="col-span-4">reps</div>
+                      <div className="col-span-3">Check</div>
                     </div>
                   )}
 
                   {(sets[exercise.unique_id] || []).map((set, idx) => (
                     <div
                       key={idx}
-                      className={`grid grid-cols-10 gap-2 items-center transition-all duration-300 ${
+                      className={`grid grid-cols-12 gap-2 items-center transition-all duration-300 ${
                         set.completed ? "opacity-50" : "opacity-100"
                       }`}
                     >
@@ -399,7 +485,7 @@ function LogContent() {
                           onClick={() => toggleWarmup(exercise.unique_id, idx)}
                           className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold cursor-pointer transition-colors ${
                             set.is_warmup
-                              ? "bg-yellow-500 text-yellow-950"
+                              ? "bg-orange-500 text-white"
                               : set.completed
                                 ? "bg-primary text-primary-foreground"
                                 : "bg-muted text-muted-foreground"
@@ -409,33 +495,33 @@ function LogContent() {
                         </div>
                       </div>
 
-                      <div className="col-span-3">
+                      <div className="col-span-4">
                         <Input
                           type="number"
-                          className={`h-10 text-center font-bold text-lg ${
-                            set.completed ? "bg-muted/50" : "bg-background"
-                          }`}
-                          placeholder={lastHistory ? String(lastHistory.weight) : "-"}
+                          className={`h-10 text-center font-bold text-lg ${set.completed ? "bg-muted/50" : "bg-background"}`}
+                          // Placeholder inteligente também na linha, se tiver histórico pra essa série específica
+                          placeholder={history[exercise.exercise_id]?.[idx+1]?.weight?.toString() || "-"}
                           value={set.weight}
                           onChange={(e) => updateSet(exercise.unique_id, idx, "weight", e.target.value)}
                         />
                       </div>
 
-                      <div className="col-span-3">
+                      <div className="col-span-4">
                         <Input
                           type="number"
-                          className={`h-10 text-center font-bold text-lg ${
-                            set.completed ? "bg-muted/50" : "bg-background"
-                          }`}
-                          placeholder={lastHistory ? String(lastHistory.reps) : "-"}
+                          className={`h-10 text-center font-bold text-lg ${set.completed ? "bg-muted/50" : "bg-background"}`}
+                          placeholder={history[exercise.exercise_id]?.[idx+1]?.reps?.toString() || "-"}
                           value={set.reps}
                           onChange={(e) => updateSet(exercise.unique_id, idx, "reps", e.target.value)}
                         />
                       </div>
 
-                      <div className="col-span-3 flex justify-center">
+                      {/* Botões de Ação */}
+                      <div className="col-span-3 flex gap-1 justify-center">
+                         {/* Botão Check */}
                         <Button
-                          className={`w-full h-10 transition-all ${
+                          size="icon"
+                          className={`flex-1 h-10 transition-all ${
                             set.completed
                               ? "bg-green-500 hover:bg-green-600 text-white"
                               : "bg-muted hover:bg-muted/80 text-muted-foreground"
@@ -444,6 +530,18 @@ function LogContent() {
                         >
                           <Check className={`h-5 w-5 ${set.completed ? "scale-110" : "scale-100"}`} />
                         </Button>
+
+                         {/* Botão de Aquecimento Explícito */}
+                         {!set.completed && (
+                             <Button
+                                size="icon"
+                                variant="ghost"
+                                className={`h-10 w-8 ${set.is_warmup ? "text-orange-500 bg-orange-500/10" : "text-muted-foreground/30 hover:text-orange-500"}`}
+                                onClick={() => toggleWarmup(exercise.unique_id, idx)}
+                             >
+                                 <Flame className="h-4 w-4" />
+                             </Button>
+                         )}
                       </div>
                     </div>
                   ))}
@@ -461,6 +559,8 @@ function LogContent() {
           )
         })}
 
+        {/* ... (O restante do código, como os Modais de busca e criação, permanece igual) ... */}
+        
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
             <Button
@@ -560,7 +660,7 @@ function LogContent() {
               "Salvando..."
             ) : (
               <>
-                <Trophy className="mr-2 h-6 w-6 text-yellow-400" /> FINALIZAR TREINO
+                <Trophy className="mr-2 h-6 w-6 text-yellow-400" /> {isEditMode ? "ATUALIZAR TREINO" : "FINALIZAR TREINO"}
               </>
             )}
           </Button>
@@ -570,7 +670,6 @@ function LogContent() {
   )
 }
 
-// 2. Novo componente padrão que envolve o conteúdo em Suspense
 export default function LogPage() {
   return (
     <Suspense fallback={<div className="flex h-screen items-center justify-center">Carregando...</div>}>
