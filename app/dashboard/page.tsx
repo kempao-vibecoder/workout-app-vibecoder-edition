@@ -7,11 +7,30 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Dumbbell, Calendar, Play, LogOut, Activity, Eye, TrendingUp, Clock, Plus, Pencil, Save, X } from "lucide-react"
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
+import { 
+  Dumbbell, 
+  Calendar, 
+  Play, 
+  LogOut, 
+  TrendingUp, 
+  Plus, 
+  Pencil, 
+  Save, 
+  X, 
+  ChevronRight,
+  BicepsFlexed,
+  LayoutList
+} from "lucide-react"
+import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from "recharts"
 import { toast } from "sonner"
 
-// ... (interfaces mantidas iguais, adicionei editable no SetLog para controle local)
+// --- Interfaces ---
+interface Workout {
+  id: string
+  name: string
+  days_of_week?: string[]
+}
+
 interface SetLog {
   id: string
   weight: number
@@ -44,13 +63,18 @@ export default function DashboardPage() {
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [recentLogs, setRecentLogs] = useState<WorkoutLog[]>([])
   const [chartData, setChartData] = useState<ChartData[]>([])
+  
+  // Stats Calculados
+  const [weeklyWorkouts, setWeeklyWorkouts] = useState(0)
+  const [totalVolume, setTotalVolume] = useState(0)
+
   const [isLoading, setIsLoading] = useState(true)
   
   // Controle do Modal de Detalhes
   const [selectedLog, setSelectedLog] = useState<WorkoutLog | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
-  const [editFormData, setEditFormData] = useState<SetLog[]>([]) // Estado local para edição
+  const [editFormData, setEditFormData] = useState<SetLog[]>([]) 
 
   const router = useRouter()
 
@@ -58,7 +82,6 @@ export default function DashboardPage() {
     checkUser()
   }, [])
 
-  // ... (funções checkUser, loadDashboardData, processChartData mantidas iguais)
   async function checkUser() {
     const supabase = createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
@@ -74,7 +97,7 @@ export default function DashboardPage() {
   async function loadDashboardData() {
     const supabase = createClient()
 
-    // 1. Carregar Treinos
+    // 1. Carregar Treinos (Para saber o treino de hoje)
     const { data: workoutsData } = await supabase.from("workouts").select("*")
     if (workoutsData) setWorkouts(workoutsData)
 
@@ -90,56 +113,79 @@ export default function DashboardPage() {
         )
       `)
       .order("date", { ascending: false })
-      .limit(20)
+      .limit(30) // Pegar um pouco mais para estatísticas
 
     if (logsData) {
       setRecentLogs(logsData as any)
-      processChartData(logsData as any)
+      processStats(logsData as any)
     }
     
     setIsLoading(false)
   }
 
-  function processChartData(logs: WorkoutLog[]) {
+  function processStats(logs: WorkoutLog[]) {
+    // Processar gráfico (últimos 7 dias)
     const dataMap: Record<string, { volume: number, treinos: number }> = {}
-    const reversedLogs = [...logs].reverse()
+    
+    // Iniciar últimos 7 dias com 0
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date()
+        d.setDate(d.getDate() - i)
+        const key = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+        dataMap[key] = { volume: 0, treinos: 0 }
+    }
 
-    reversedLogs.forEach(log => {
-        const dateKey = new Date(log.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-        if (!dataMap[dateKey]) dataMap[dateKey] = { volume: 0, treinos: 0 }
-        dataMap[dateKey].treinos += 1
+    let weekCount = 0
+    let volCount = 0
+
+    logs.forEach(log => {
+        const dateObj = new Date(log.date)
+        const dateKey = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+        
+        // Volume do treino
         const sessionVolume = log.set_logs.reduce((acc, set) => acc + (set.weight * set.reps), 0)
-        dataMap[dateKey].volume += sessionVolume
+
+        // Se estiver dentro do range do gráfico
+        if (dataMap[dateKey]) {
+            dataMap[dateKey].treinos += 1
+            dataMap[dateKey].volume += sessionVolume
+        }
+
+        // Stats da semana atual (domingo a sábado ou últimos 7 dias)
+        const diffTime = Math.abs(new Date().getTime() - dateObj.getTime())
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) 
+        if (diffDays <= 7) {
+            weekCount += 1
+            volCount += sessionVolume
+        }
     })
 
     const chart = Object.entries(dataMap).map(([key, val]) => ({
         name: key, volume: val.volume, treinos: val.treinos
-    })).slice(-7)
+    }))
 
     setChartData(chart)
+    setWeeklyWorkouts(weekCount)
+    setTotalVolume(volCount)
   }
 
   function openLogDetails(log: WorkoutLog) {
     setSelectedLog(log)
-    setEditFormData(JSON.parse(JSON.stringify(log.set_logs))) // Deep copy para edição
+    setEditFormData(JSON.parse(JSON.stringify(log.set_logs))) 
     setIsEditing(false)
     setIsDetailsOpen(true)
   }
 
-  // Lógica 2: Função para salvar edição
   async function handleSaveChanges() {
       const supabase = createClient()
-      
       const updates = editFormData.map(set => 
           supabase.from("set_logs").update({ weight: Number(set.weight), reps: Number(set.reps) }).eq("id", set.id)
       )
-
       await Promise.all(updates)
-      
       toast.success("Treino atualizado!")
       setIsEditing(false)
       setIsDetailsOpen(false)
-      loadDashboardData() // Recarrega para atualizar gráfico e lista
+      loadDashboardData() 
   }
 
   async function handleLogout() {
@@ -148,12 +194,12 @@ export default function DashboardPage() {
     window.location.href = "/auth/login"
   }
 
-  const today = new Date().toLocaleDateString("pt-BR", { weekday: "long" })
+  // Lógica do Treino de Hoje
+  const todayName = new Date().toLocaleDateString("pt-BR", { weekday: "long" }).toLowerCase()
   const todayWorkout = workouts.find((w) =>
-    (w.days_of_week || []).some((day) => day && today.toLowerCase().includes(day.toLowerCase())),
+    (w.days_of_week || []).some((day) => day && day.toLowerCase() === todayName),
   )
 
-  // ... (Loading e Header mantidos iguais)
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -164,6 +210,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-background pb-10">
+      {/* Header */}
       <header className="border-b bg-card">
         <div className="container mx-auto flex items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
@@ -181,132 +228,21 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <div className="container mx-auto p-4 md:p-6 space-y-6">
-        {/* ... (Cards de Treino de Hoje e Gráfico mantidos iguais ao anterior) ... */}
+      <div className="container mx-auto p-4 md:p-6 space-y-8">
         
-        {/* ... (Grid de botões de atalho mantido igual) ... */}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Histórico Recente</CardTitle>
-            <CardDescription>Seus últimos treinos realizados</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentLogs.map((log) => (
-                <div key={log.id} className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors group cursor-pointer" onClick={() => openLogDetails(log)}>
-                  <div className="flex flex-col gap-1">
-                    <p className="font-semibold text-base">{(log.workouts as any)?.name || "Treino Avulso"}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{new Date(log.date).toLocaleDateString("pt-BR", { weekday: 'short', day: '2-digit', month: 'short' })}</span>
-                        <span>•</span>
-                        <span>{log.set_logs.length} séries</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-3">
-                    <div className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                        log.completed 
-                        ? "bg-green-500/10 text-green-600 border-green-500/20" 
-                        : "bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
-                    }`}>
-                      {log.completed ? "Feito" : "Parcial"}
-                    </div>
-                    <Eye className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        <DialogContent className="max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-                <div className="flex items-center justify-between pr-8">
-                    <DialogTitle>{(selectedLog?.workouts as any)?.name || "Detalhes do Treino"}</DialogTitle>
-                    {!isEditing ? (
-                        <Button size="sm" variant="ghost" onClick={() => setIsEditing(true)}>
-                            <Pencil className="h-4 w-4 mr-2" /> Editar
-                        </Button>
-                    ) : (
-                        <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)}>
-                            <X className="h-4 w-4 mr-2" /> Cancelar
-                        </Button>
-                    )}
-                </div>
-                <DialogDescription>
-                    Realizado em {selectedLog && new Date(selectedLog.date).toLocaleDateString("pt-BR")}
-                </DialogDescription>
-            </DialogHeader>
-            
-            <div className="mt-4 space-y-6">
-                {selectedLog && Object.entries(
-                    (isEditing ? editFormData : selectedLog.set_logs).reduce((acc: any, set) => {
-                        const name = set.exercises?.name || "Exercício Desconhecido"
-                        if (!acc[name]) acc[name] = []
-                        acc[name].push(set)
-                        return acc
-                    }, {})
-                ).map(([exerciseName, sets]: [string, any], idx) => (
-                    <div key={idx} className="border-b pb-4 last:border-0 last:pb-0">
-                        <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                            <div className="w-1 h-4 bg-primary rounded-full"></div>
-                            {exerciseName}
-                        </h4>
-                        <div className="grid grid-cols-4 gap-2 text-xs text-muted-foreground mb-1 pl-3">
-                            <span>Série</span>
-                            <span className="text-center">Kg</span>
-                            <span className="text-center">Reps</span>
-                        </div>
-                        <div className="space-y-1 pl-3">
-                            {sets.sort((a: any, b: any) => a.set_number - b.set_number).map((set: any, sIdx: number) => (
-                                <div key={set.id} className="grid grid-cols-4 gap-2 text-sm items-center">
-                                    <span className="text-muted-foreground">#{set.set_number}</span>
-                                    {isEditing ? (
-                                        <>
-                                            <Input 
-                                                type="number" 
-                                                className="h-7 text-center" 
-                                                value={set.weight} 
-                                                onChange={(e) => {
-                                                    const newValue = e.target.value
-                                                    setEditFormData(prev => prev.map(p => p.id === set.id ? {...p, weight: newValue} : p))
-                                                }}
-                                            />
-                                            <Input 
-                                                type="number" 
-                                                className="h-7 text-center" 
-                                                value={set.reps}
-                                                onChange={(e) => {
-                                                    const newValue = e.target.value
-                                                    setEditFormData(prev => prev.map(p => p.id === set.id ? {...p, reps: newValue} : p))
-                                                }}
-                                            />
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="text-center font-medium">{set.weight}</span>
-                                            <span className="text-center font-medium">{set.reps}</span>
-                                        </>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
-            
-            {isEditing && (
-                <DialogFooter className="pt-4">
-                    <Button onClick={handleSaveChanges} className="w-full">
-                        <Save className="mr-2 h-4 w-4" /> Salvar Alterações
-                    </Button>
-                </DialogFooter>
-            )}
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
-}
+        {/* Section 1: Hero & Today's Workout */}
+        <div className="grid gap-4 md:grid-cols-12">
+            {/* Card Principal: Treino de Hoje */}
+            <div className="md:col-span-8">
+                <Card className="h-full border-primary/20 bg-gradient-to-br from-card to-secondary/10 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-10 -mt-10 blur-3xl pointer-events-none"></div>
+                    
+                    <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-2xl font-bold">Olá, Atleta! 👋</h2>
+                                <p className="text-muted-foreground">Pronto para superar seus limites hoje?</p>
+                            </div>
+                            {/* Stats Rápidos Mobile */}
+                            <div className="text-right hidden sm:block">
+                                <p
